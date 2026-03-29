@@ -1,0 +1,11 @@
+{
+  "name": "claude-status-line",
+  "version": "1.0.0",
+  "description": "Rich status bar: model, context usage, cache hit rate, session duration, rate limits",
+  "author": {
+    "name": "egerev"
+  },
+  "repository": "https://github.com/egerev/claude-status-line",
+  "license": "MIT",
+  "keywords": ["status", "statusline", "context", "rate-limits"]
+}

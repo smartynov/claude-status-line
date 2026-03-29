@@ -54,7 +54,7 @@ mkdir -p "$CLAUDE_DIR/data/sessions"
 
 # 4. Copy scripts
 cp "$SCRIPT_DIR/status_line.py" "$CLAUDE_DIR/status_lines/status_line.py"
-cp "$SCRIPT_DIR/hook_prompt_submit.py" "$CLAUDE_DIR/hooks/hook_prompt_submit.py"
+cp "$SCRIPT_DIR/hooks/hook_prompt_submit.py" "$CLAUDE_DIR/hooks/hook_prompt_submit.py"
 echo "   ✓ Scripts copied to ~/.claude/"
 
 # 5. Patch settings.json (always overwrite statusLine, add hook if missing)

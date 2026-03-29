@@ -3,7 +3,7 @@
 Hook for UserPromptSubmit — tracks session data for the status line.
 
 Fires on every user prompt. Records:
-  1. Session file (.claude/data/sessions/{session_id}.json)
+  1. Session file under plugin data or ~/.claude/data/sessions/{session_id}.json
      - created_at: session start time (for duration display)
      - prompt_count: number of prompts (for context usage estimation)
 
@@ -12,7 +12,10 @@ Requires Python 3.9+ (stdlib only).
 Source: https://github.com/egerev/claude-status-line
 """
 
+from __future__ import annotations
+
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -20,13 +23,23 @@ from pathlib import Path
 sys.stdin.reconfigure(encoding="utf-8")
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-SESSIONS_DIR = Path(".claude/data/sessions")
+
+def plugin_data_dir() -> Path:
+    custom = os.environ.get("CLAUDE_PLUGIN_DATA")
+    if custom:
+        return Path(custom)
+    return Path.home() / ".claude" / "data"
+
+
+def sessions_dir() -> Path:
+    return plugin_data_dir() / "sessions"
 
 
 def update_session(session_id: str) -> None:
     """Create or update session file with created_at and prompt_count."""
-    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-    session_file = SESSIONS_DIR / f"{session_id}.json"
+    sdir = sessions_dir()
+    sdir.mkdir(parents=True, exist_ok=True)
+    session_file = sdir / f"{session_id}.json"
 
     if session_file.exists():
         try:

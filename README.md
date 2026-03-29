@@ -53,7 +53,7 @@ Shows what percentage of input tokens came from cache vs. being processed fresh.
 
 ### How prompt estimation works
 
-The status line records rate limit percentages after each prompt in `~/.claude/data/rate_history.jsonl`. It groups data by session, calculates how much each prompt consumed on average, and extrapolates remaining prompts. The estimate accounts for your mix of light prompts and heavy autonomous workflows.
+The status line records rate limit percentages after each prompt in `rate_history.jsonl` under your data directory (`~/.claude/data` when installed manually, or the plugin persistent directory when installed as a plugin). It groups data by session, calculates how much each prompt consumed on average, and extrapolates remaining prompts. The estimate accounts for your mix of light prompts and heavy autonomous workflows.
 
 ## Installation
 
@@ -61,7 +61,19 @@ The status line records rate limit percentages after each prompt in `~/.claude/d
 - [Claude Code](https://claude.ai/claude-code) v2.1.83+
 - **Python 3.9+** on your `PATH` as `python3` (stdlib only — no pip packages)
 
-### Install
+### Install as a plugin (recommended)
+
+In Claude Code, open the plugin manager (`/plugin`), add this repo as a marketplace source, then install **claude-status-line** from Discover.
+
+```text
+/plugin marketplace add egerev/claude-status-line
+```
+
+After install, use `/reload-plugins` if hooks do not apply immediately. A `SessionStart` hook registers `statusLine` in `~/.claude/settings.json` pointing at the plugin’s `status_line.py`.
+
+**Do not combine** plugin install with the shell installer below unless you remove duplicate `UserPromptSubmit` hooks and a single `statusLine` — otherwise hooks or the status command may run twice or fight each other.
+
+### Install with install.sh (manual)
 
 ```bash
 git clone https://github.com/egerev/claude-status-line.git
@@ -71,13 +83,29 @@ chmod +x install.sh && ./install.sh
 
 Then restart Claude Code.
 
+To **update** after `git pull`: run `./install.sh` again (it overwrites the copied scripts and refreshes `settings.json` commands).
+
+### Update a plugin install
+
+Use the plugin manager, e.g. `/plugin update claude-status-line@<your-marketplace-name>` (exact syntax is shown in `/plugin` for your added marketplace). Bump `version` in `.claude-plugin/plugin.json` when you ship changes so updates are detected.
+
 ### Uninstall
 
 ```bash
 chmod +x uninstall.sh && ./uninstall.sh
 ```
 
-## Files
+## Repository layout (plugin)
+
+```
+.claude-plugin/plugin.json   # Plugin manifest
+hooks/hooks.json             # SessionStart + UserPromptSubmit
+hooks/session_start.py       # Writes statusLine into ~/.claude/settings.json
+hooks/hook_prompt_submit.py  # Session / prompt_count tracking
+status_line.py               # Status bar renderer (repo root)
+```
+
+## Files after manual install (`install.sh`)
 
 ```
 ~/.claude/
@@ -98,8 +126,8 @@ Edit `~/.claude/status_lines/status_line.py`:
 ### Change thresholds
 ```python
 # Context degradation thresholds (% of context window)
-CTX_YELLOW = 10   # yellow at 10%
-CTX_RED = 20      # red at 20%
+CTX_YELLOW = 20   # yellow at 20%
+CTX_RED = 40      # red at 40%
 
 # Rate limit thresholds (% used)
 RATE_YELLOW = 50  # yellow at 50%
@@ -107,9 +135,7 @@ RATE_RED = 80     # red at 80%
 ```
 
 ### Change bar width
-```python
-BAR_WIDTH = 10  # number of blocks in progress bars
-```
+Edit the default `width=10` argument in `progress_bar()` and `rate_bar()` in `status_line.py`.
 
 ### Add/remove segments
 Each segment is added via `parts.append(...)` in the `generate()` function. Comment out or rearrange as needed.
@@ -120,6 +146,14 @@ Each segment is added via `parts.append(...)` in the `generate()` function. Comm
 2. **Minimal latency** — Hook adds ~50ms per prompt (Python startup + JSON write)
 3. **No network calls** — Everything is local file I/O
 4. **Safe** — All errors are silently caught, never breaks Claude Code
+
+### Local plugin development
+
+```bash
+claude --plugin-dir /path/to/claude-status-line
+```
+
+Then `/reload-plugins` after editing hook or manifest files.
 
 ## Requirements
 

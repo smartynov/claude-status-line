@@ -15,8 +15,8 @@ Segments:
 
 Data sources:
   - stdin JSON from Claude Code (model, context, tokens, cost, rate_limits)
-  - .claude/data/sessions/{session_id}.json (created_at for duration)
-  - ~/.claude/data/rate_history.jsonl (rate limit history for prompt estimates)
+  - Session files under CLAUDE_PLUGIN_DATA or ~/.claude/data/sessions/
+  - rate_history.jsonl in the same data directory (plugin or ~/.claude/data)
 
 Requires Python 3.9+ (stdlib only).
 
@@ -26,6 +26,7 @@ Source: https://github.com/egerev/claude-status-line
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -132,15 +133,32 @@ def progress_bar(pct: float, width: int = 10) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Data directory (plugin persistent dir or ~/.claude/data)
+# ---------------------------------------------------------------------------
+
+def plugin_data_dir() -> Path:
+    custom = os.environ.get("CLAUDE_PLUGIN_DATA")
+    if custom:
+        return Path(custom)
+    return Path.home() / ".claude" / "data"
+
+
+def rate_history_path() -> Path:
+    return plugin_data_dir() / "rate_history.jsonl"
+
+
+# ---------------------------------------------------------------------------
 # Session duration
 # ---------------------------------------------------------------------------
 
 def _find_session_file(session_id: str, workspace_dir: Optional[str] = None) -> Optional[Path]:
     """Find session file, checking CWD and workspace_dir."""
-    candidates = [Path(".claude/data/sessions") / f"{session_id}.json"]
+    candidates = [
+        Path(".claude/data/sessions") / f"{session_id}.json",
+        plugin_data_dir() / "sessions" / f"{session_id}.json",
+    ]
     if workspace_dir:
         candidates.append(Path(workspace_dir) / ".claude" / "data" / "sessions" / f"{session_id}.json")
-    # Also check home dir as fallback
     candidates.append(Path.home() / ".claude" / "data" / "sessions" / f"{session_id}.json")
     for p in candidates:
         if p.exists():
@@ -168,8 +186,6 @@ def get_session_duration(session_id: str, workspace_dir: Optional[str] = None) -
 # Rate limit prompt estimation
 # ---------------------------------------------------------------------------
 
-RATE_HISTORY_FILE = Path.home() / ".claude" / "data" / "rate_history.jsonl"
-
 
 def record_rate_snapshot(data: dict, prompt_count: Optional[int]) -> None:
     """Append rate limits to history, once per prompt (keyed by prompt_count)."""
@@ -189,12 +205,13 @@ def record_rate_snapshot(data: dict, prompt_count: Optional[int]) -> None:
         "7d_pct": seven_day.get("used_percentage"),
     }
 
-    RATE_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    rh = rate_history_path()
+    rh.parent.mkdir(parents=True, exist_ok=True)
 
     # Check if we already recorded this prompt_count for this session
     try:
-        if RATE_HISTORY_FILE.exists():
-            lines = RATE_HISTORY_FILE.read_text(encoding="utf-8").strip().split("\n")
+        if rh.exists():
+            lines = rh.read_text(encoding="utf-8").strip().split("\n")
             # Check last 20 lines for duplicate (multiple sessions interleave)
             for line in lines[-20:]:
                 try:
@@ -207,7 +224,7 @@ def record_rate_snapshot(data: dict, prompt_count: Optional[int]) -> None:
         pass
 
     try:
-        with open(RATE_HISTORY_FILE, "a", encoding="utf-8") as f:
+        with open(rh, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except Exception:
         pass
@@ -215,10 +232,11 @@ def record_rate_snapshot(data: dict, prompt_count: Optional[int]) -> None:
 
 def _load_rate_entries() -> Optional[list[dict]]:
     """Load parsed entries from rate_history.jsonl."""
-    if not RATE_HISTORY_FILE.exists():
+    rh = rate_history_path()
+    if not rh.exists():
         return None
     try:
-        lines = RATE_HISTORY_FILE.read_text(encoding="utf-8").strip().split("\n")
+        lines = rh.read_text(encoding="utf-8").strip().split("\n")
         if len(lines) < 2:
             return None
         entries = []
