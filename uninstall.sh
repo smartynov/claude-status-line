@@ -10,6 +10,7 @@ echo "Removing Claude Code Status Line..."
 # Remove scripts
 rm -f "$CLAUDE_DIR/status_lines/status_line.py"
 rm -f "$CLAUDE_DIR/hooks/hook_prompt_submit.py"
+rm -f "$CLAUDE_DIR/hooks/user_prompt_submit.py"
 
 # Remove statusLine and hook from settings.json
 SETTINGS="$CLAUDE_DIR/settings.json"

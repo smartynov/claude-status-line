@@ -10,16 +10,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "📊 Installing Claude Code Status Line..."
 echo ""
 
-# 1. Check for uv
-if ! command -v uv &>/dev/null; then
-    echo "⚠️  'uv' not found. Installing..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh 2>/dev/null || {
-        echo "❌ Failed to install uv. Install manually:"
-        echo "   pip install uv"
-        echo "   # or: curl -LsSf https://astral.sh/uv/install.sh | sh"
-        exit 1
-    }
-    echo "   ✓ uv installed"
+# 1. Check for python3
+if ! command -v python3 &>/dev/null; then
+    echo "❌ python3 not found. Please install Python 3.11+."
+    exit 1
 fi
 
 # 2. Check Claude Code version
@@ -88,7 +82,7 @@ except json.JSONDecodeError:
 old_status = settings.get('statusLine')
 settings['statusLine'] = {
     'type': 'command',
-    'command': 'uv run ~/.claude/status_lines/status_line.py',
+    'command': 'python3 ~/.claude/status_lines/status_line.py',
     'padding': 0
 }
 if old_status:
@@ -101,19 +95,19 @@ hooks = settings.setdefault('hooks', {})
 if 'UserPromptSubmit' not in hooks:
     hooks['UserPromptSubmit'] = []
 
-existing = [h for h in hooks['UserPromptSubmit']
-            if any('hook_prompt_submit.py' in hh.get('command', '')
-                   for hh in h.get('hooks', []))]
-if not existing:
-    hooks['UserPromptSubmit'].append({
-        'hooks': [{
-            'type': 'command',
-            'command': 'uv run ~/.claude/hooks/hook_prompt_submit.py'
-        }]
-    })
-    print('   ✓ Added UserPromptSubmit hook')
-else:
-    print('   ✓ Hook already configured')
+# Remove old uv-based hook if present, add python3-based
+hooks['UserPromptSubmit'] = [
+    h for h in hooks['UserPromptSubmit']
+    if not any('hook_prompt_submit.py' in hh.get('command', '')
+               for hh in h.get('hooks', []))
+]
+hooks['UserPromptSubmit'].append({
+    'hooks': [{
+        'type': 'command',
+        'command': 'python3 ~/.claude/hooks/hook_prompt_submit.py'
+    }]
+})
+print('   ✓ Added UserPromptSubmit hook')
 
 with open(settings_path, 'w') as f:
     json.dump(settings, f, indent=2, ensure_ascii=False)

@@ -60,7 +60,6 @@ The status line records rate limit percentages after each prompt in `~/.claude/d
 ### Prerequisites
 - [Claude Code](https://claude.ai/claude-code) v2.1.83+
 - Python 3.11+
-- [uv](https://github.com/astral-sh/uv) (`pip install uv`)
 
 ### Install
 
