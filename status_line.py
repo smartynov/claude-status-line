@@ -19,6 +19,8 @@ Data sources:
   - ~/.claude/data/rate_history.jsonl (rate limit history for prompt estimates)
 
 Requires Python 3.9+ (stdlib only).
+
+Source: https://github.com/egerev/claude-status-line
 """
 
 from __future__ import annotations

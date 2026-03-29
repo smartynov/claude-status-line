@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Claude Code Status Line — installer
-# https://github.com/smartynov/claude-status-line
+# https://github.com/egerev/claude-status-line
 
 CLAUDE_DIR="$HOME/.claude"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

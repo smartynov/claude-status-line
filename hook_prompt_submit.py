@@ -8,6 +8,8 @@ Fires on every user prompt. Records:
      - prompt_count: number of prompts (for context usage estimation)
 
 Requires Python 3.9+ (stdlib only).
+
+Source: https://github.com/egerev/claude-status-line
 """
 
 import json
