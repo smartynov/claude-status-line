@@ -42,7 +42,7 @@ Shows what percentage of input tokens came from cache vs. being processed fresh.
 - **5-hour limit**: Resets every ~5 hours on a fixed timer
 - **7-day limit**: Resets every ~7 days on a fixed timer
 
-Both `~Np` and `↻` only appear when the limit is yellow or red (≥50% used).
+`↻` always shows the time until the limit resets to zero. `~Np` only appears when yellow or red (≥50% used).
 
 **Color thresholds:**
 - 🟢 <50% — Plenty of room

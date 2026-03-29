@@ -5,12 +5,23 @@
 # ///
 
 """
-Claude Code Status Line — rich status bar for your terminal.
+Status Line for Claude Code.
 
-Shows: model, context usage, cache hit rate, session duration,
-rate limits with progress bars and estimated remaining prompts.
+Format:
+  [Opus 4.6] | [████░░░░] 6% ~14 left | In:64k Out:14k | Cache:85% | ⏱ 25m | 5h:8% · 7d:89% ~14p
 
-Source: https://github.com/egerev/claude-status-line
+Segments:
+  1. Model name
+  2. Context bar + % + estimated prompts left
+  3. In/Out tokens
+  4. Cache hit %
+  5. Session duration
+  6. Rate limits (5h / 7d) with color + estimated prompts remaining
+
+Data sources:
+  - stdin JSON from Claude Code (model, context, tokens, cost, rate_limits)
+  - .claude/data/sessions/{session_id}.json (created_at for duration)
+  - ~/.claude/data/rate_history.jsonl (rate limit history for prompt estimates)
 """
 
 import json
@@ -37,25 +48,18 @@ FILLED = "\u2588"  # █
 EMPTY = "\u2591"   # ░
 
 # ---------------------------------------------------------------------------
-# Thresholds (customize these to your preference)
+# Context thresholds (based on degradation research for complex tasks)
 # ---------------------------------------------------------------------------
-
-# Context window: based on degradation research for complex reasoning tasks
-# Green: 0-10% (0-100K tokens) — no degradation
-# Yellow: 10-20% (100K-200K) — degradation starts for complex tasks
+# Green: 0-10% (0-100K) — safe, no degradation
+# Yellow: 10-20% (100K-200K) — degradation starts
 # Red: 20%+ (200K+) — significant degradation, consider /clear
+
 CTX_YELLOW = 10
 CTX_RED = 20
 
-# Rate limits: percentage of limit used
-# Green: <50% — plenty of room
-# Yellow: 50-80% — getting there, shows ~Np estimate and reset time
-# Red: >80% — running low, shows ~Np estimate and reset time
+# Rate limit thresholds
 RATE_YELLOW = 50
 RATE_RED = 80
-
-# Progress bar width (number of blocks)
-BAR_WIDTH = 10
 
 
 # ---------------------------------------------------------------------------
@@ -78,19 +82,13 @@ def rate_color(pct: float) -> str:
     return RED
 
 
-def rate_bar(pct: float, width: int = BAR_WIDTH) -> str:
+def rate_bar(pct: float, width: int = 10) -> str:
+    """Short progress bar for rate limits."""
     filled = int((pct / 100) * width)
     if pct > 0 and filled == 0:
         filled = 1  # show at least 1 block when not zero
     empty = width - filled
     color = rate_color(pct)
-    return f"{color}{FILLED * filled}{DIM}{EMPTY * empty}{RESET}"
-
-
-def progress_bar(pct: float, width: int = BAR_WIDTH) -> str:
-    filled = int((pct / 100) * width)
-    empty = width - filled
-    color = ctx_color(pct)
     return f"{color}{FILLED * filled}{DIM}{EMPTY * empty}{RESET}"
 
 
@@ -112,10 +110,21 @@ def fmt_duration(seconds: float) -> str:
         return f"{int(seconds)}s"
     elif seconds < 3600:
         return f"{int(seconds // 60)}m"
-    else:
+    elif seconds < 86400:
         h = int(seconds // 3600)
         m = int((seconds % 3600) // 60)
         return f"{h}h{m:02d}m" if m else f"{h}h"
+    else:
+        d = int(seconds // 86400)
+        h = int((seconds % 86400) // 3600)
+        return f"{d}d{h}h" if h else f"{d}d"
+
+
+def progress_bar(pct: float, width: int = 10) -> str:
+    filled = int((pct / 100) * width)
+    empty = width - filled
+    color = ctx_color(pct)
+    return f"{color}{FILLED * filled}{DIM}{EMPTY * empty}{RESET}"
 
 
 # ---------------------------------------------------------------------------
@@ -123,9 +132,11 @@ def fmt_duration(seconds: float) -> str:
 # ---------------------------------------------------------------------------
 
 def _find_session_file(session_id: str, workspace_dir: str | None = None) -> Path | None:
+    """Find session file, checking CWD and workspace_dir."""
     candidates = [Path(".claude/data/sessions") / f"{session_id}.json"]
     if workspace_dir:
         candidates.append(Path(workspace_dir) / ".claude" / "data" / "sessions" / f"{session_id}.json")
+    # Also check home dir as fallback
     candidates.append(Path.home() / ".claude" / "data" / "sessions" / f"{session_id}.json")
     for p in candidates:
         if p.exists():
@@ -176,14 +187,16 @@ def record_rate_snapshot(data: dict, prompt_count: int | None) -> None:
 
     RATE_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
 
+    # Check if we already recorded this prompt_count for this session
     try:
         if RATE_HISTORY_FILE.exists():
             lines = RATE_HISTORY_FILE.read_text(encoding="utf-8").strip().split("\n")
+            # Check last 20 lines for duplicate (multiple sessions interleave)
             for line in lines[-20:]:
                 try:
                     prev = json.loads(line)
                     if prev.get("sid") == session_id and prev.get("pc") == prompt_count:
-                        return
+                        return  # already recorded
                 except json.JSONDecodeError:
                     continue
     except Exception:
@@ -197,6 +210,7 @@ def record_rate_snapshot(data: dict, prompt_count: int | None) -> None:
 
 
 def _load_rate_entries() -> list[dict] | None:
+    """Load parsed entries from rate_history.jsonl."""
     if not RATE_HISTORY_FILE.exists():
         return None
     try:
@@ -215,16 +229,18 @@ def _load_rate_entries() -> list[dict] | None:
 
 
 def estimate_remaining_prompts(current_pct: float, key: str = "5h_pct") -> int | None:
-    """Estimate remaining prompts based on historical rate limit consumption.
+    """Estimate remaining prompts for a given rate limit.
 
-    Groups entries by session, calculates per-session consumption rate,
-    then averages across all sessions for a robust estimate.
+    Groups entries by session, calculates per-session delta (last - first pct)
+    and prompt count, then averages across all sessions. This avoids
+    cross-session interleaving and outlier issues.
     """
     entries = _load_rate_entries()
     if not entries:
         return None
 
     try:
+        # Group by session
         sessions: dict[str, list[dict]] = {}
         for e in entries:
             sid = e.get("sid", "")
@@ -241,8 +257,8 @@ def estimate_remaining_prompts(current_pct: float, key: str = "5h_pct") -> int |
             last_pct = sess_entries[-1].get(key, 0)
             delta = last_pct - first_pct
             if delta <= 0:
-                continue
-            n_prompts = len(sess_entries) - 1
+                continue  # skip sessions with no consumption or resets
+            n_prompts = len(sess_entries) - 1  # deltas = entries - 1
             total_delta += delta
             total_prompts += n_prompts
 
@@ -265,6 +281,7 @@ def generate(data: dict) -> str:
 
     # 1. Model + reasoning effort
     model = (data.get("model") or {}).get("display_name", "Claude")
+    # Clean up verbose display name: "Opus 4.6 (1M context)" → "Opus 4.6"
     if "(" in model:
         model = model[:model.index("(")].strip()
     effort = None
@@ -286,6 +303,7 @@ def generate(data: dict) -> str:
     bar = progress_bar(used_pct)
     color = ctx_color(used_pct)
 
+    # Context window size label (1000000 → "1M")
     window_size_raw = ctx.get("context_window_size", 1000000) or 1000000
     if window_size_raw >= 1000000:
         ctx_label = f"{window_size_raw // 1000000}M"
@@ -293,6 +311,7 @@ def generate(data: dict) -> str:
         ctx_label = f"{window_size_raw // 1000}K"
     ctx_str = f"{DIM}{ctx_label}{RESET} {bar} {color}{used_pct:.0f}%{RESET}"
 
+    # Estimate context turns left (rough: based on avg input per turn)
     current = ctx.get("current_usage") or {}
     total_in = (
         (current.get("input_tokens", 0) or 0)
@@ -301,6 +320,7 @@ def generate(data: dict) -> str:
     )
     window_size = window_size_raw
 
+    # Get prompt count from session file
     session_id = data.get("session_id", "") or ""
     ws = data.get("workspace") or {}
     workspace_dir = ws.get("project_dir") or ws.get("current_dir") if isinstance(ws, dict) else ws
@@ -313,6 +333,7 @@ def generate(data: dict) -> str:
         except Exception:
             pass
 
+    # Record rate limits snapshot (once per prompt)
     record_rate_snapshot(data, prompt_count)
 
     if prompt_count and prompt_count > 1 and total_in > 0:
@@ -339,13 +360,13 @@ def generate(data: dict) -> str:
             cc = RED
         parts.append(f"Cache:{cc}{hit_pct:.0f}%{RESET}")
 
-    # 4. Session duration
+    # 5. Session duration
     if session_id:
         dur = get_session_duration(session_id, workspace_dir)
         if dur is not None:
             parts.append(f"{BRIGHT_WHITE}\u23f1 {fmt_duration(dur)}{RESET}")
 
-    # 5. Rate limits
+    # 7. Rate limits
     rate_limits = data.get("rate_limits") or {}
     five_hour = rate_limits.get("five_hour", {})
     seven_day = rate_limits.get("seven_day", {})
@@ -363,11 +384,11 @@ def generate(data: dict) -> str:
                 est = estimate_remaining_prompts(fh_pct, "5h_pct")
                 if est is not None:
                     lim_str += f" {BRIGHT_WHITE}~{est}p{RESET}"
-                resets_at = five_hour.get("resets_at")
-                if resets_at:
-                    reset_in = resets_at - datetime.now(timezone.utc).timestamp()
-                    if reset_in > 0:
-                        lim_str += f" {CYAN}\u21bb{fmt_duration(reset_in)}{RESET}"
+            resets_at = five_hour.get("resets_at")
+            if resets_at:
+                reset_in = resets_at - datetime.now(timezone.utc).timestamp()
+                if reset_in > 0:
+                    lim_str += f" {CYAN}\u21bb{fmt_duration(reset_in)}{RESET}"
             lim_parts.append(lim_str)
 
         if sd_pct is not None:
@@ -378,11 +399,11 @@ def generate(data: dict) -> str:
                 est = estimate_remaining_prompts(sd_pct, "7d_pct")
                 if est is not None:
                     lim_str += f" {BRIGHT_WHITE}~{est}p{RESET}"
-                resets_at = seven_day.get("resets_at")
-                if resets_at:
-                    reset_in = resets_at - datetime.now(timezone.utc).timestamp()
-                    if reset_in > 0:
-                        lim_str += f" {CYAN}\u21bb{fmt_duration(reset_in)}{RESET}"
+            resets_at = seven_day.get("resets_at")
+            if resets_at:
+                reset_in = resets_at - datetime.now(timezone.utc).timestamp()
+                if reset_in > 0:
+                    lim_str += f" {CYAN}\u21bb{fmt_duration(reset_in)}{RESET}"
             lim_parts.append(lim_str)
 
         parts.append(" \u00b7 ".join(lim_parts))
