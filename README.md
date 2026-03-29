@@ -38,9 +38,9 @@ Shows what percentage of input tokens came from cache vs. being processed fresh.
 
 **`~9p`** — Estimated remaining prompts before hitting the limit. Calculated from your historical usage patterns across all sessions. Gets more accurate over time.
 
-**`↻3h`** — Time until the limit resets or eases:
-- **5-hour limit**: Sliding window — old usage continuously falls off. `↻` shows when the oldest chunk drops.
-- **7-day limit**: Fixed reset — resets completely at the shown time.
+**`↻3h`** — Time until the limit resets to zero. Both limits reset completely at the shown time:
+- **5-hour limit**: Resets every ~5 hours on a fixed timer
+- **7-day limit**: Resets every ~7 days on a fixed timer
 
 Both `~Np` and `↻` only appear when the limit is yellow or red (≥50% used).
 
