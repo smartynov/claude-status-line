@@ -50,12 +50,12 @@ EMPTY = "\u2591"   # ░
 # ---------------------------------------------------------------------------
 # Context thresholds (based on degradation research for complex tasks)
 # ---------------------------------------------------------------------------
-# Green: 0-10% (0-100K) — safe, no degradation
-# Yellow: 10-20% (100K-200K) — degradation starts
-# Red: 20%+ (200K+) — significant degradation, consider /clear
+# Green: 0-20% (0-200K) — safe, no degradation
+# Yellow: 20-40% (200K-400K) — some degradation on complex tasks
+# Red: 40%+ (400K+) — significant degradation, consider /clear
 
-CTX_YELLOW = 10
-CTX_RED = 20
+CTX_YELLOW = 20
+CTX_RED = 40
 
 # Rate limit thresholds
 RATE_YELLOW = 50
@@ -293,7 +293,7 @@ def generate(data: dict) -> str:
         pass
     model_str = f"{CYAN}[{model}"
     if effort:
-        model_str += f" {DIM}\u00b7 {effort}{CYAN}"
+        model_str += f" {BRIGHT_WHITE}\u00b7 {effort}{CYAN}"
     model_str += f"]{RESET}"
     parts.append(model_str)
 
@@ -309,7 +309,7 @@ def generate(data: dict) -> str:
         ctx_label = f"{window_size_raw // 1000000}M"
     else:
         ctx_label = f"{window_size_raw // 1000}K"
-    ctx_str = f"{DIM}{ctx_label}{RESET} {bar} {color}{used_pct:.0f}%{RESET}"
+    ctx_str = f"{BRIGHT_WHITE}{ctx_label}{RESET} {bar} {color}{used_pct:.0f}%{RESET}"
 
     # Estimate context turns left (rough: based on avg input per turn)
     current = ctx.get("current_usage") or {}
@@ -358,7 +358,7 @@ def generate(data: dict) -> str:
             cc = YELLOW
         else:
             cc = RED
-        parts.append(f"Cache:{cc}{hit_pct:.0f}%{RESET}")
+        parts.append(f"{BRIGHT_WHITE}Cache:{RESET}{cc}{hit_pct:.0f}%{RESET}")
 
     # 5. Session duration
     if session_id:
@@ -379,7 +379,7 @@ def generate(data: dict) -> str:
         if fh_pct is not None:
             fc = rate_color(fh_pct)
             bar = rate_bar(fh_pct)
-            lim_str = f"5h {bar} {fc}{fh_pct:.0f}%{RESET}"
+            lim_str = f"{BRIGHT_WHITE}5h{RESET} {bar} {fc}{fh_pct:.0f}%{RESET}"
             if fh_pct >= RATE_YELLOW:
                 est = estimate_remaining_prompts(fh_pct, "5h_pct")
                 if est is not None:
@@ -394,7 +394,7 @@ def generate(data: dict) -> str:
         if sd_pct is not None:
             sc = rate_color(sd_pct)
             bar = rate_bar(sd_pct)
-            lim_str = f"7d {bar} {sc}{sd_pct:.0f}%{RESET}"
+            lim_str = f"{BRIGHT_WHITE}7d{RESET} {bar} {sc}{sd_pct:.0f}%{RESET}"
             if sd_pct >= RATE_YELLOW:
                 est = estimate_remaining_prompts(sd_pct, "7d_pct")
                 if est is not None:
