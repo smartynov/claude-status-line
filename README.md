@@ -59,7 +59,7 @@ The status line records rate limit percentages after each prompt in `~/.claude/d
 
 ### Prerequisites
 - [Claude Code](https://claude.ai/claude-code) v2.1.83+
-- Python 3.11+
+- **Python 3.9+** on your `PATH` as `python3` (stdlib only — no pip packages)
 
 ### Install
 
