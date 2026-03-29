@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 """
 Hook for UserPromptSubmit — tracks session data for the status line.
 
@@ -8,7 +7,7 @@ Fires on every user prompt. Records:
      - created_at: session start time (for duration display)
      - prompt_count: number of prompts (for context usage estimation)
 
-Source: https://github.com/egerev/claude-status-line
+Requires Python 3.9+ (stdlib only).
 """
 
 import json

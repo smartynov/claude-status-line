@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Claude Code Status Line — installer
-# https://github.com/egerev/claude-status-line
+# https://github.com/smartynov/claude-status-line
 
 CLAUDE_DIR="$HOME/.claude"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -10,11 +10,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "📊 Installing Claude Code Status Line..."
 echo ""
 
-# 1. Check for python3
+# 1. Python 3.9+ (stdlib-only scripts; no pip deps)
 if ! command -v python3 &>/dev/null; then
-    echo "❌ python3 not found. Please install Python 3.11+."
+    echo "❌ python3 not found. Install Python 3.9+ (e.g. python.org, Homebrew, apt)."
     exit 1
 fi
+py_minor=$(python3 -c 'import sys; print(sys.version_info.minor)' 2>/dev/null) || true
+py_major=$(python3 -c 'import sys; print(sys.version_info.major)' 2>/dev/null) || true
+if [ "${py_major:-0}" -lt 3 ] || { [ "${py_major:-0}" -eq 3 ] && [ "${py_minor:-0}" -lt 9 ]; }; then
+    echo "❌ Need Python 3.9 or newer (found ${py_major:-?}.${py_minor:-?})."
+    exit 1
+fi
+echo "   ✓ python3 OK ($(python3 -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])'))"
 
 # 2. Check Claude Code version
 if command -v claude &>/dev/null; then
@@ -60,58 +67,75 @@ fi
 # Backup existing settings
 cp "$SETTINGS" "$SETTINGS.backup.$(date +%s)"
 
-python3 -c "
-import json, re
+python3 << 'PATCH_SETTINGS'
+import json
+import re
+import shlex
+from pathlib import Path
 
-settings_path = '$SETTINGS'
-with open(settings_path, 'r') as f:
+claude_dir = Path.home() / ".claude"
+settings_path = claude_dir / "settings.json"
+status_py = claude_dir / "status_lines" / "status_line.py"
+hook_py = claude_dir / "hooks" / "hook_prompt_submit.py"
+
+status_cmd = f"python3 {shlex.quote(str(status_py))}"
+hook_cmd = f"python3 {shlex.quote(str(hook_py))}"
+
+with open(settings_path, "r", encoding="utf-8") as f:
     raw = f.read()
 
 # Strip comments and trailing commas (settings.json often has them)
-raw = re.sub(r'//.*?\n', '\n', raw)           # // line comments
-raw = re.sub(r'/\*.*?\*/', '', raw, flags=re.S)  # /* block comments */
-raw = re.sub(r',\s*([}\]])', r'\1', raw)       # trailing commas
+raw = re.sub(r"//.*?\n", "\n", raw)
+raw = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
+raw = re.sub(r",\s*([}\]])", r"\1", raw)
 
 try:
     settings = json.loads(raw)
 except json.JSONDecodeError:
-    print('   ⚠ Could not parse settings.json — starting fresh (backup saved)')
+    print("   ⚠ Could not parse settings.json — starting fresh (backup saved)")
     settings = {}
 
 # Always set our statusLine (overwrite any existing)
-old_status = settings.get('statusLine')
-settings['statusLine'] = {
-    'type': 'command',
-    'command': 'python3 ~/.claude/status_lines/status_line.py',
-    'padding': 0
+old_status = settings.get("statusLine")
+settings["statusLine"] = {
+    "type": "command",
+    "command": status_cmd,
+    "padding": 0,
 }
 if old_status:
-    print('   ⚠ Replaced existing statusLine (backup saved)')
+    print("   ⚠ Replaced existing statusLine (backup saved)")
 else:
-    print('   ✓ Added statusLine')
+    print("   ✓ Added statusLine")
 
-# Add hook if not present
-hooks = settings.setdefault('hooks', {})
-if 'UserPromptSubmit' not in hooks:
-    hooks['UserPromptSubmit'] = []
+hooks = settings.setdefault("hooks", {})
+if "UserPromptSubmit" not in hooks:
+    hooks["UserPromptSubmit"] = []
 
-# Remove old uv-based hook if present, add python3-based
-hooks['UserPromptSubmit'] = [
-    h for h in hooks['UserPromptSubmit']
-    if not any('hook_prompt_submit.py' in hh.get('command', '')
-               for hh in h.get('hooks', []))
+# Migrate older installs (uv / tilde paths) to python3 + absolute path
+for block in hooks["UserPromptSubmit"]:
+    for hh in block.get("hooks", []):
+        c = hh.get("command", "")
+        if "hook_prompt_submit.py" in c:
+            hh["command"] = hook_cmd
+
+existing = [
+    h
+    for h in hooks["UserPromptSubmit"]
+    if any(
+        "hook_prompt_submit.py" in hh.get("command", "") for hh in h.get("hooks", [])
+    )
 ]
-hooks['UserPromptSubmit'].append({
-    'hooks': [{
-        'type': 'command',
-        'command': 'python3 ~/.claude/hooks/hook_prompt_submit.py'
-    }]
-})
-print('   ✓ Added UserPromptSubmit hook')
+if not existing:
+    hooks["UserPromptSubmit"].append(
+        {"hooks": [{"type": "command", "command": hook_cmd}]}
+    )
+    print("   ✓ Added UserPromptSubmit hook")
+else:
+    print("   ✓ UserPromptSubmit hook OK (updated command if needed)")
 
-with open(settings_path, 'w') as f:
+with open(settings_path, "w", encoding="utf-8") as f:
     json.dump(settings, f, indent=2, ensure_ascii=False)
-"
+PATCH_SETTINGS
 
 echo ""
 echo "✅ Done! Restart Claude Code to see the status line."

@@ -59,12 +59,12 @@ The status line records rate limit percentages after each prompt in `~/.claude/d
 
 ### Prerequisites
 - [Claude Code](https://claude.ai/claude-code) v2.1.83+
-- Python 3.11+
+- **Python 3.9+** on your `PATH` as `python3` (stdlib only — no pip packages)
 
 ### Install
 
 ```bash
-git clone https://github.com/egerev/claude-status-line.git
+git clone https://github.com/smartynov/claude-status-line.git
 cd claude-status-line
 chmod +x install.sh && ./install.sh
 ```
@@ -117,7 +117,7 @@ Each segment is added via `parts.append(...)` in the `generate()` function. Comm
 ## How it works
 
 1. **No context cost** — Scripts run as external processes, not inside Claude's context window
-2. **Minimal latency** — Hook adds ~50ms per prompt (Python startup + JSON write)
+2. **Minimal latency** — Hook adds ~50ms per prompt (Python startup + JSON write; `python3` only, no extra tooling)
 3. **No network calls** — Everything is local file I/O
 4. **Safe** — All errors are silently caught, never breaks Claude Code
 
