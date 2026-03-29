@@ -39,6 +39,8 @@ CYAN = "\033[36m"
 GREEN = "\033[32m"
 YELLOW = "\033[33m"
 RED = "\033[31m"
+BRIGHT_RED = "\033[91m"
+BRIGHT_MAGENTA = "\033[95m"
 DIM = "\033[90m"
 BRIGHT_WHITE = "\033[97m"
 BRIGHT_CYAN = "\033[96m"
@@ -291,9 +293,20 @@ def generate(data: dict) -> str:
             effort = json.loads(settings_file.read_text(encoding="utf-8")).get("effortLevel")
     except Exception:
         pass
-    model_str = f"{CYAN}[{model}"
+    # Model color: more powerful = more aggressive
+    model_lower = model.lower()
+    if "opus" in model_lower:
+        mc = BRIGHT_MAGENTA
+    elif "sonnet" in model_lower:
+        mc = YELLOW
+    elif "haiku" in model_lower:
+        mc = DIM
+    else:
+        mc = BRIGHT_WHITE
+
+    model_str = f"{mc}[{model}"
     if effort:
-        model_str += f" {BRIGHT_WHITE}\u00b7 {effort}{CYAN}"
+        model_str += f" \u00b7 {effort}"
     model_str += f"]{RESET}"
     parts.append(model_str)
 
