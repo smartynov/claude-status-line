@@ -67,11 +67,22 @@ fi
 cp "$SETTINGS" "$SETTINGS.backup.$(date +%s)"
 
 python3 -c "
-import json
+import json, re
 
 settings_path = '$SETTINGS'
 with open(settings_path, 'r') as f:
-    settings = json.load(f)
+    raw = f.read()
+
+# Strip comments and trailing commas (settings.json often has them)
+raw = re.sub(r'//.*?\n', '\n', raw)           # // line comments
+raw = re.sub(r'/\*.*?\*/', '', raw, flags=re.S)  # /* block comments */
+raw = re.sub(r',\s*([}\]])', r'\1', raw)       # trailing commas
+
+try:
+    settings = json.loads(raw)
+except json.JSONDecodeError:
+    print('   ⚠ Could not parse settings.json — starting fresh (backup saved)')
+    settings = {}
 
 # Always set our statusLine (overwrite any existing)
 old_status = settings.get('statusLine')
